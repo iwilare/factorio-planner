@@ -15,21 +15,16 @@ struct Factory<'a> {
 #[derive(Clone)]
 struct Production<'a> {
     target: &'a Item<'a>,
-    machines: f64,
+    output_per_second: f64,
     location: Vec<&'a Item<'a>>,
 }
 
 impl Item<'_> {
-    fn production_frequency(&self) -> f64 {
-        self.factory.crafting_speed / self.time
-    }
-
     fn output_per_second(&self) -> f64 {
-        self.production_frequency() * self.count as f64
+        self.factory.crafting_speed * self.count as f64 / self.time
     }
-
-    fn throughput(&self, machines: f64) -> f64 {
-        self.output_per_second() * machines
+    fn required_machines(&self, required_output_per_second: f64) -> f64 {
+        required_output_per_second / self.output_per_second()
     }
 }
 
@@ -88,22 +83,21 @@ const CIRCUIT3  : Item = Item { name: "circuit3",         factory: &ASM_, count:
 const SPEED     : Item = Item { name: "speed mod",        factory: &ASM_, count: 1,  time: 15.0, components: &[(5,  &CIRCUIT2), (5, &CIRCUIT1)] };
 const SP5       : Item = Item { name: "sp yellow",        factory: &ASM_, count: 3,  time: 21.0, components: &[(3,  &LDS), (2, &CIRCUIT3), (1, &ROBOT)] };
 
-fn solve<'a>(target: &'a Item, production_per_second: f64) -> Vec<Production<'a>> {
-    let machines = production_per_second / target.output_per_second();
+fn solve<'a>(target: &'a Item, output_per_second: f64) -> Vec<Production<'a>> {
     target.components
           .iter()
-          .flat_map(|&(required, item)| solve(item, machines * required as f64 * target.production_frequency()))
+          .flat_map(|&(required, item)| solve(item, required as f64 * output_per_second / target.count as f64))
           .map(|mut p| { p.location.push(target); p })
-          .chain(core::iter::once(Production { target, machines, location: vec![] }))
+          .chain(core::iter::once(Production { target, output_per_second, location: vec![] }))
           .collect()
 }
 
 fn print_production<'a>(result: impl Iterator<Item = &'a Production<'a>>) {
     println!("{: <16} | {: >10} | {: >12} | {: <50}", "Product", "Factories", "Production/s", "Destination");
     println!("{:-<16}-+-{:->10}-+-{:->12}-+-{:-<50}", "", "", "", "");
-    for Production { target, machines, location } in result {
+    for Production { target, output_per_second, location } in result {
         let location = location.iter().map(|i| i.name).rev().collect::<Vec<_>>().join(" ← ");
-        println!("{: <16} | {: >10.3} | {: >12.3} | {: <50}", target.name, machines, target.throughput(*machines), location);
+        println!("{: <16} | {: >10.3} | {: >12.3} | {: <50}", target.name, target.required_machines(*output_per_second), output_per_second, location);
     }
 }
 
